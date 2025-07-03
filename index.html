@@ -1,0 +1,664 @@
+<!DOCTYPE html>
+<html lang="vi">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Chuyển Đổi Văn Bản Thành Âm Thanh ElevenLabs</title>
+    <!-- Tailwind CSS CDN -->
+    <script src="https://cdn.tailwindcss.com"></script>
+    <!-- Google Fonts - Inter -->
+    <link href="https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700&display=swap" rel="stylesheet">
+    <style>
+        body {
+            font-family: 'Inter', sans-serif;
+            -webkit-font-smoothing: antialiased;
+            -moz-osx-font-smoothing: grayscale;
+        }
+        /* Custom scrollbar for activity log */
+        .activity-log-scroll::-webkit-scrollbar {
+            width: 8px;
+        }
+        .activity-log-scroll::-webkit-scrollbar-track {
+            background: #f1f1f1;
+            border-radius: 10px;
+        }
+        .activity-log-scroll::-webkit-scrollbar-thumb {
+            background: #888;
+            border-radius: 10px;
+        }
+        .activity-log-scroll::-webkit-scrollbar-thumb:hover {
+            background: #555;
+        }
+    </style>
+</head>
+<body class="bg-gray-100 text-gray-900 min-h-screen flex items-center justify-center p-4">
+    <!-- Main Application Container -->
+    <div id="app-container" class="w-full max-w-4xl bg-white rounded-xl shadow-lg overflow-hidden">
+        <!-- Header -->
+        <header class="bg-gradient-to-r from-blue-600 to-blue-800 p-4 text-white flex flex-col sm:flex-row justify-between items-center rounded-t-xl">
+            <h1 class="text-2xl font-bold mb-2 sm:mb-0">Chuyển Đổi Văn Bản Thành Âm Thanh ElevenLabs</h1>
+            <div id="user-id-display" class="text-sm bg-blue-700 px-3 py-1 rounded-full opacity-90 hidden">
+                User ID: <span class="font-mono" id="current-user-id"></span>
+            </div>
+        </header>
+        <!-- Navigation Tabs -->
+        <nav class="bg-gray-50 border-b border-gray-200">
+            <ul class="flex flex-wrap justify-center sm:justify-start">
+                <li class="-mb-px mr-1">
+                    <button id="tab-convert" class="tab-button inline-block py-3 px-6 text-sm font-medium rounded-t-lg transition-colors duration-200 text-blue-700 border-b-2 border-blue-700 bg-white">
+                        Chuyển Đổi
+                    </button>
+                </li>
+                <li class="-mb-px mr-1">
+                    <button id="tab-manage" class="tab-button inline-block py-3 px-6 text-sm font-medium rounded-t-lg transition-colors duration-200 text-gray-600 hover:text-blue-600 hover:bg-gray-100">
+                        Quản Lý API Key
+                    </button>
+                </li>
+                <li class="-mb-px mr-1">
+                    <button id="tab-batch" class="tab-button inline-block py-3 px-6 text-sm font-medium rounded-t-lg transition-colors duration-200 text-gray-600 hover:text-blue-600 hover:bg-gray-100">
+                        Xử Lý Hàng Loạt (Chưa có)
+                    </button>
+                </li>
+                <li class="-mb-px mr-1">
+                    <button id="tab-options" class="tab-button inline-block py-3 px-6 text-sm font-medium rounded-t-lg transition-colors duration-200 text-gray-600 hover:text-blue-600 hover:bg-gray-100">
+                        Tùy Chọn Xử Lý (Chưa có)
+                    </button>
+                </li>
+            </ul>
+        </nav>
+        <!-- Main Content Area -->
+        <div id="content-area" class="p-6 relative">
+            <!-- Content will be rendered here by JavaScript -->
+            <div id="loading-overlay" class="absolute inset-0 bg-white bg-opacity-75 flex items-center justify-center z-10 hidden rounded-b-xl">
+                <div class="flex flex-col items-center">
+                    <div class="animate-spin rounded-full h-12 w-12 border-b-2 border-gray-900"></div>
+                    <p class="mt-4 text-lg text-gray-700">Đang tải ứng dụng...</p>
+                </div>
+            </div>
+        </div>
+        <!-- Activity Log Section -->
+        <div class="p-6 pt-0">
+            <div class="bg-gray-100 p-4 rounded-lg shadow-inner h-64 overflow-y-auto activity-log-scroll">
+                <h3 class="font-bold text-lg mb-2 text-gray-800">Nhật Ký Hoạt Động</h3>
+                <ul id="activity-log-list" class="space-y-1 text-sm text-gray-700">
+                    <!-- Logs will be appended here by JavaScript -->
+                </ul>
+            </div>
+        </div>
+        <!-- Footer -->
+        <footer class="bg-gray-200 p-4 text-center text-sm text-gray-600 rounded-b-xl">
+            Ứng dụng Chuyển Đổi Văn Bản Thành Âm Thanh ElevenLabs
+        </footer>
+    </div>
+    <!-- Custom Modal for alerts/confirmations -->
+    <div id="custom-modal" class="fixed inset-0 bg-black bg-opacity-50 flex justify-center items-center z-50 p-4 hidden">
+        <div class="bg-white p-6 rounded-lg shadow-xl max-w-sm w-full text-center">
+            <p id="modal-message" class="text-lg font-semibold mb-4"></p>
+            <button
+                id="modal-close-button"
+                class="px-6 py-2 bg-blue-600 text-white rounded-md hover:bg-blue-700 focus:outline-none focus:ring-2 focus:ring-blue-500 focus:ring-offset-2 transition duration-150 ease-in-out"
+            >
+                Đóng
+            </button>
+        </div>
+    </div>
+    <!-- Firebase SDKs -->
+    <script type="module">
+        import { initializeApp } from "https://www.gstatic.com/firebasejs/11.6.1/firebase-app.js";
+        import { getAuth, signInAnonymously, signInWithCustomToken, onAuthStateChanged } from "https://www.gstatic.com/firebasejs/11.6.1/firebase-auth.js";
+        import { getFirestore, doc, getDoc, addDoc, setDoc, updateDoc, deleteDoc, onSnapshot, collection, query, where, getDocs } from "https://www.gstatic.com/firebasejs/11.6.1/firebase-firestore.js";
+        // --- Global Variables and State ---
+        let app;
+        let db;
+        let auth;
+        let userId = null;
+        let isAuthReady = false;
+        let appId = 'default-app-id'; // Default for local development
+        let activeTab = 'convert';
+        let logs = [];
+        let apiKeys = []; // Array to store API keys from Firestore
+        let availableVoices = []; // Dynamically updated from ElevenLabs API
+        let availableModels = []; // Dynamically updated from ElevenLabs API
+        const contentArea = document.getElementById('content-area');
+        const activityLogList = document.getElementById('activity-log-list');
+        const userIdDisplay = document.getElementById('current-user-id');
+        const userIdDisplayContainer = document.getElementById('user-id-display');
+        const loadingOverlay = document.getElementById('loading-overlay');
+        const customModal = document.getElementById('custom-modal');
+        const modalMessageElement = document.getElementById('modal-message');
+        const modalCloseButton = document.getElementById('modal-close-button');
+        // --- Utility Functions ---
+        /**
+         * Shows a custom modal with a message.
+         * @param {string} message - The message to display in the modal.
+         */
+        function showCustomModal(message) {
+            modalMessageElement.textContent = message;
+            customModal.classList.remove('hidden');
+        }
+        /**
+         * Hides the custom modal.
+         */
+        function hideCustomModal() {
+            customModal.classList.add('hidden');
+        }
+        /**
+         * Adds a log message to the activity log and re-renders it.
+         * @param {string} message - The log message.
+         * @param {string} [type='info'] - Type of log (e.g., 'info', 'error', 'warn').
+         */
+        function addLog(message, type = 'info') {
+            const timestamp = new Date().toLocaleTimeString();
+            logs.push({ message: message, timestamp: timestamp, type: type });
+            renderActivityLog();
+            // Scroll to bottom of log
+            const logContainer = activityLogList.parentElement;
+            if (logContainer) {
+                logContainer.scrollTop = logContainer.scrollHeight;
+            }
+        }
+        /**
+         * Displays the loading overlay.
+         */
+        function showLoadingOverlay() {
+            loadingOverlay.classList.remove('hidden');
+        }
+        /**
+         * Hides the loading overlay.
+         */
+        function hideLoadingOverlay() {
+            loadingOverlay.classList.add('hidden');
+        }
+        /**
+         * A helper function to parse error details from an API response.
+         * @param {Response} response - The fetch API response object.
+         * @returns {Promise<string>} A promise that resolves to a detailed error string.
+         */
+        async function getErrorDetails(response) {
+            let errorDetail = `Lỗi HTTP ${response.status}: ${response.statusText}`;
+            try {
+                const errorData = await response.json();
+                if (errorData && errorData.detail) {
+                    if (typeof errorData.detail === 'string') {
+                        errorDetail = errorData.detail;
+                    } else if (Array.isArray(errorData.detail)) {
+                        errorDetail = errorData.detail.map(err => `${err.loc ? err.loc.join(' > ') + ': ' : ''}${err.msg}`).join(', ');
+                    } else {
+                        errorDetail = JSON.stringify(errorData.detail);
+                    }
+                } else {
+                    errorDetail = JSON.stringify(errorData);
+                }
+            } catch (e) {
+                try {
+                    const textError = await response.text();
+                    if (textError) {
+                        errorDetail = textError;
+                    }
+                } catch (textErr) {
+                    // Fallback to the status text if all else fails
+                }
+            }
+            return errorDetail;
+        }
+        // --- ElevenLabs API Functions (Actual Calls) ---
+        /**
+         * Fetches voices from ElevenLabs API.
+         * @param {string} apiKey - The ElevenLabs API key.
+         * @returns {Promise<Array<{voice_id: string, name: string}>>} A promise resolving to an array of voices.
+         */
+        async function fetchElevenLabsVoices(apiKey) {
+            addLog(`Đang tải giọng nói cho khóa: ${apiKey.substring(0, 5)}...`);
+            try {
+                const response = await fetch('https://api.elevenlabs.io/v1/voices', {
+                    method: 'GET',
+                    headers: { 'xi-api-key': apiKey, 'Content-Type': 'application/json', 'Accept': 'application/json' }
+                });
+                if (!response.ok) {
+                    const errorDetail = await getErrorDetails(response);
+                    throw new Error(`Không thể tải giọng nói: ${errorDetail}`);
+                }
+                const data = await response.json();
+                return data.voices;
+            } catch (error) {
+                console.error("Lỗi khi tải giọng nói:", error);
+                throw error;
+            }
+        }
+        /**
+         * Fetches models from ElevenLabs API.
+         * @param {string} apiKey - The ElevenLabs API key.
+         * @returns {Promise<Array<{model_id: string, name: string}>>} A promise resolving to an array of models.
+         */
+        async function fetchElevenLabsModels(apiKey) {
+            addLog(`Sử dụng các mô hình được định nghĩa trước...`);
+            return new Promise(resolve => {
+                const models = [
+                    { model_id: 'eleven_turbo_v2', name: 'Eleven Turbo V2' },
+                    { model_id: 'eleven_monolingual_v1', name: 'Eleven Monolingual V1' },
+                    { model_id: 'eleven_multilingual_v2', name: 'Eleven Multilingual V2' },
+                ];
+                resolve(models);
+            });
+        }
+        /**
+         * Fetches account info/credits from ElevenLabs API.
+         * @param {string} apiKey - The ElevenLabs API key.
+         * @returns {Promise<object>} A promise resolving to account info.
+         */
+        async function fetchElevenLabsAccountInfo(apiKey) {
+            addLog(`Đang tải thông tin tài khoản cho khóa: ${apiKey.substring(0, 5)}...`);
+            try {
+                const response = await fetch('https://api.elevenlabs.io/v1/user/subscription', {
+                    method: 'GET',
+                    headers: { 'xi-api-key': apiKey, 'Content-Type': 'application/json', 'Accept': 'application/json' }
+                });
+                if (!response.ok) {
+                    const errorDetail = await getErrorDetails(response);
+                    throw new Error(`Không thể tải thông tin tài khoản: ${errorDetail}`);
+                }
+                return await response.json();
+            } catch (error) {
+                console.error("Lỗi khi tải thông tin tài khoản:", error);
+                throw error;
+            }
+        }
+        /**
+         * Performs Text-to-Speech conversion using ElevenLabs API.
+         * @param {string} apiKey - The ElevenLabs API key.
+         * @param {string} voiceId - The ID of the voice to use.
+         * @param {string} modelId - The ID of the model to use.
+         * @param {string} text - The text to convert.
+         * @returns {Promise<Blob>} A promise resolving to an audio Blob.
+         */
+        async function elevenLabsTextToSpeech(apiKey, voiceId, modelId, text) {
+            addLog(`Đang gọi API TTS ElevenLabs cho giọng nói ${voiceId} với mô hình ${modelId}...`);
+            try {
+                const response = await fetch(`https://api.elevenlabs.io/v1/text-to-speech/${voiceId}`, {
+                    method: 'POST',
+                    headers: { 'xi-api-key': apiKey, 'Content-Type': 'application/json', 'Accept': 'audio/mpeg' },
+                    body: JSON.stringify({
+                        text: text,
+                        model_id: modelId,
+                        voice_settings: { stability: 0.5, similarity_boost: 0.75 }
+                    })
+                });
+                if (!response.ok) {
+                    const errorDetail = await getErrorDetails(response);
+                    throw new Error(`Không thể chuyển đổi văn bản thành giọng nói: ${errorDetail}`);
+                }
+                return await response.blob();
+            } catch (error) {
+                console.error("Lỗi trong quá trình TTS của ElevenLabs:", error);
+                throw error;
+            }
+        }
+        // --- Firebase Initialization ---
+        async function initializeFirebase() {
+            showLoadingOverlay();
+            try {
+                const firebaseConfig = typeof __firebase_config !== 'undefined' ? JSON.parse(__firebase_config) : {};
+                app = initializeApp(firebaseConfig);
+                db = getFirestore(app);
+                auth = getAuth(app);
+                if (typeof __app_id !== 'undefined') {
+                    appId = __app_id;
+                }
+                addLog("Đang khởi tạo Firebase...");
+                onAuthStateChanged(auth, async (user) => {
+                    if (user) {
+                        userId = user.uid;
+                    } else {
+                        if (typeof __initial_auth_token !== 'undefined' && __initial_auth_token) {
+                            await signInWithCustomToken(auth, __initial_auth_token);
+                            userId = auth.currentUser.uid;
+                        } else {
+                            await signInAnonymously(auth);
+                            userId = auth.currentUser.uid;
+                        }
+                    }
+                    userIdDisplay.textContent = userId;
+                    userIdDisplayContainer.classList.remove('hidden');
+                    addLog(`Đã đăng nhập với User ID: ${userId}`);
+                    isAuthReady = true;
+                    hideLoadingOverlay();
+                    renderActiveTab();
+                    listenForApiKeys();
+                });
+            } catch (error) {
+                console.error("Lỗi khởi tạo Firebase:", error);
+                addLog(`Lỗi khởi tạo Firebase: ${error.message}`, 'error');
+                isAuthReady = true;
+                hideLoadingOverlay();
+            }
+        }
+        // --- Firestore Operations ---
+        function getKeysCollectionPath() {
+            return (db && userId) ? `artifacts/${appId}/users/${userId}/api_keys` : null;
+        }
+        function listenForApiKeys() {
+            const keysCollectionPath = getKeysCollectionPath();
+            if (!keysCollectionPath) {
+                addLog("Không thể lắng nghe khóa API: Hệ thống chưa sẵn sàng.", 'warn');
+                return;
+            }
+            const q = collection(db, keysCollectionPath);
+            onSnapshot(q, (snapshot) => {
+                apiKeys = snapshot.docs.map(doc => ({ id: doc.id, ...doc.data() }));
+                addLog(`Đã tải ${apiKeys.length} khóa API.`);
+                if (activeTab === 'manage') {
+                    renderKeyManager();
+                } else if (activeTab === 'convert') {
+                    if (availableVoices.length === 0 || availableModels.length === 0) {
+                        const firstActiveKey = apiKeys.find(key => key.isActive);
+                        if (firstActiveKey) {
+                            updateVoiceAndModelDropdowns(firstActiveKey.key);
+                        } else {
+                            renderTextToSpeechConverter(); // Render with empty state
+                        }
+                    }
+                }
+            }, (error) => {
+                console.error("Lỗi tải khóa API:", error);
+                addLog(`Lỗi tải khóa API: ${error.message}`, 'error');
+            });
+        }
+        async function addOrUpdateApiKey(key, accountInfo) {
+            const keysCollectionPath = getKeysCollectionPath();
+            if (!keysCollectionPath) {
+                showCustomModal("Hệ thống chưa sẵn sàng. Vui lòng thử lại.");
+                return;
+            }
+            try {
+                const existingKey = apiKeys.find(k => k.key === key);
+                const nextResetDate = accountInfo.subscription?.next_character_count_reset_unix ? new Date(accountInfo.subscription.next_character_count_reset_unix * 1000).toISOString() : null;
+                const subscriptionTier = accountInfo.subscription?.tier || 'N/A';
+                const canDoTextToSpeech = accountInfo.subscription?.can_do_text_to_speech ?? false;
+                const keyData = {
+                    key: key,
+                    characterLimit: accountInfo.character_limit,
+                    characterCount: accountInfo.character_count,
+                    lastVerified: new Date().toISOString(),
+                    isActive: canDoTextToSpeech,
+                    subscriptionTier: subscriptionTier,
+                    nextResetDate: nextResetDate
+                };
+                if (existingKey) {
+                    const keyDocRef = doc(db, keysCollectionPath, existingKey.id);
+                    await updateDoc(keyDocRef, keyData);
+                    addLog(`Đã cập nhật khóa API hiện có.`);
+                } else {
+                    const docRef = await addDoc(collection(db, keysCollectionPath), { ...keyData, createdAt: new Date().toISOString() });
+                    addLog(`Đã thêm khóa API mới.`);
+                }
+            } catch (error) {
+                console.error("Lỗi khi thêm/cập nhật khóa API:", error);
+                showCustomModal(`Lỗi khi thêm/cập nhật khóa API: ${error.message}`);
+                addLog(`Lỗi khi thêm/cập nhật khóa API: ${error.message}`, 'error');
+            }
+        }
+        async function deleteApiKey(keyId) {
+            const keysCollectionPath = getKeysCollectionPath();
+            if (!keysCollectionPath) {
+                showCustomModal("Hệ thống chưa sẵn sàng. Vui lòng thử lại.");
+                return;
+            }
+            try {
+                await deleteDoc(doc(db, keysCollectionPath, keyId));
+                addLog(`Đã xóa khóa API.`);
+            } catch (error) {
+                console.error("Lỗi khi xóa khóa API:", error);
+                showCustomModal(`Lỗi khi xóa khóa API: ${error.message}`);
+                addLog(`Lỗi khi xóa khóa API: ${error.message}`, 'error');
+            }
+        }
+        async function updateKeyCredits(keyId, newCharacterCount) {
+            const keysCollectionPath = getKeysCollectionPath();
+            if (!keysCollectionPath) {
+                console.error("Không thể cập nhật credits: Hệ thống chưa sẵn sàng.");
+                return;
+            }
+            try {
+                const keyDocRef = doc(db, keysCollectionPath, keyId);
+                await updateDoc(keyDocRef, {
+                    characterCount: newCharacterCount,
+                    lastUsed: new Date().toISOString()
+                });
+                addLog(`Đã cập nhật credits của khóa.`);
+            } catch (error) {
+                console.error("Lỗi cập nhật credits cho khóa API:", error);
+                addLog(`Lỗi cập nhật credits: ${error.message}`, 'error');
+            }
+        }
+        // --- UI Rendering Functions ---
+        function renderActivityLog() {
+            activityLogList.innerHTML = logs.map(log => `<li class="break-words"><span class="font-mono text-gray-600">[${log.timestamp}]</span> ${log.message}</li>`).join('');
+        }
+        function renderKeyManager() {
+            contentArea.innerHTML = `
+                <div class="p-6 bg-white rounded-lg shadow-md mb-6">
+                    <h2 class="text-2xl font-bold mb-4 text-gray-800">Quản Lý API Key</h2>
+                    <div class="mb-4 p-4 bg-yellow-100 border border-yellow-400 text-yellow-800 rounded-md">
+                        <p class="font-bold">CẢNH BÁO BẢO MẬT:</p>
+                        <p class="text-sm mt-1">Chỉ sử dụng ứng dụng này cho mục đích phát triển. Việc để lộ API key trong mã nguồn phía client là không an toàn.</p>
+                    </div>
+                    <div class="mb-4">
+                        <label for="newApiKeyInput" class="block text-sm font-medium text-gray-700 mb-1">Khóa API ElevenLabs</label>
+                        <div class="flex flex-col sm:flex-row space-y-2 sm:space-y-0 sm:space-x-2">
+                            <input type="password" id="newApiKeyInput" placeholder="Nhập khóa API của bạn" class="flex-grow p-2 border border-gray-300 rounded-md focus:ring-blue-500 focus:border-blue-500" />
+                            <button id="verifyAndAddKeyButton" class="px-4 py-2 bg-purple-600 text-white rounded-md hover:bg-purple-700">Xác Thực & Thêm Khóa</button>
+                        </div>
+                    </div>
+                    <h3 class="text-xl font-semibold mb-3 text-gray-800">Các Khóa API Hiện Có</h3>
+                    <div id="api-keys-list-container" class="overflow-x-auto rounded-lg border border-gray-200">
+                        ${apiKeys.length === 0 ? '<p class="p-4 text-gray-600">Chưa có khóa API nào được thêm.</p>' : `
+                            <table class="min-w-full divide-y divide-gray-200">
+                                <thead class="bg-gray-50">
+                                    <tr>
+                                        ${['Khóa (ẩn)', 'Gói', 'Credits Còn Lại', 'Hạn Dùng', 'Trạng Thái', 'Xác Thực Lần Cuối', 'Hành động'].map(h => `<th scope="col" class="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">${h}</th>`).join('')}
+                                    </tr>
+                                </thead>
+                                <tbody class="bg-white divide-y divide-gray-200">
+                                    ${apiKeys.map(key => {
+                                        const remainingCredits = key.characterLimit - key.characterCount;
+                                        const isActive = key.isActive && remainingCredits > 0;
+                                        return `
+                                        <tr data-key-id="${key.id}">
+                                            <td class="px-6 py-4 whitespace-nowrap text-sm font-mono text-gray-900">${key.key ? key.key.substring(0, 4) + '...' + key.key.substring(key.key.length - 4) : 'N/A'}</td>
+                                            <td class="px-6 py-4 whitespace-nowrap text-sm text-gray-700">${key.subscriptionTier || 'N/A'}</td>
+                                            <td class="px-6 py-4 whitespace-nowrap text-sm font-semibold ${remainingCredits <= 1000 ? 'text-red-600' : 'text-green-600'}">${remainingCredits.toLocaleString() || 'N/A'}</td>
+                                            <td class="px-6 py-4 whitespace-nowrap text-sm text-gray-700">${key.nextResetDate ? new Date(key.nextResetDate).toLocaleDateString() : 'Không có'}</td>
+                                            <td class="px-6 py-4 whitespace-nowrap"><span class="px-2 inline-flex text-xs leading-5 font-semibold rounded-full ${isActive ? 'bg-green-100 text-green-800' : 'bg-red-100 text-red-800'}">${isActive ? 'Hoạt động' : 'Không hoạt động'}</span></td>
+                                            <td class="px-6 py-4 whitespace-nowrap text-sm text-gray-700">${key.lastVerified ? new Date(key.lastVerified).toLocaleDateString() : 'Chưa có'}</td>
+                                            <td class="px-6 py-4 whitespace-nowrap text-right text-sm font-medium">
+                                                <button class="verify-key-button text-blue-600 hover:text-blue-900 mr-3" data-key-id="${key.id}" data-api-key="${key.key}">Xác thực lại</button>
+                                                <button class="delete-key-button text-red-600 hover:text-red-900" data-key-id="${key.id}">Xóa</button>
+                                            </td>
+                                        </tr>
+                                    `}).join('')}
+                                </tbody>
+                            </table>
+                        `}
+                    </div>
+                </div>
+            `;
+            document.getElementById('verifyAndAddKeyButton').addEventListener('click', handleVerifyAndAddKey);
+            document.querySelectorAll('.delete-key-button').forEach(b => b.addEventListener('click', (e) => deleteApiKey(e.target.dataset.keyId)));
+            document.querySelectorAll('.verify-key-button').forEach(b => b.addEventListener('click', (e) => handleVerifyAndAddKey(e)));
+        }
+        async function handleVerifyAndAddKey(event) {
+            const apiKeyToVerify = event.target.dataset.apiKey || document.getElementById('newApiKeyInput').value.trim();
+            if (!apiKeyToVerify) {
+                showCustomModal("Vui lòng nhập khóa API.");
+                return;
+            }
+            addLog(`Đang cố gắng xác thực khóa: ${apiKeyToVerify.substring(0, 5)}...`);
+            try {
+                const accountInfo = await fetchElevenLabsAccountInfo(apiKeyToVerify);
+                await addOrUpdateApiKey(apiKeyToVerify, accountInfo);
+                showCustomModal("Khóa API đã được xác thực và thêm/cập nhật thành công.");
+                if (document.getElementById('newApiKeyInput')) document.getElementById('newApiKeyInput').value = '';
+                updateVoiceAndModelDropdowns(apiKeyToVerify);
+            } catch (error) {
+                console.error("Xác thực thất bại:", error);
+                showCustomModal(`Xác thực khóa API thất bại: ${error.message}`);
+                addLog(`Xác thực khóa API thất bại: ${error.message}`, 'error');
+            }
+        }
+        async function updateVoiceAndModelDropdowns(apiKey) {
+            if (!apiKey) {
+                availableVoices = [];
+                availableModels = [];
+                if (activeTab === 'convert') renderTextToSpeechConverter();
+                return;
+            }
+            addLog(`Đang cập nhật danh sách giọng nói và mô hình...`);
+            try {
+                const [fetchedVoices, fetchedModels] = await Promise.all([
+                    fetchElevenLabsVoices(apiKey),
+                    fetchElevenLabsModels(apiKey)
+                ]);
+                availableVoices = fetchedVoices.map(v => ({ voice_id: v.voice_id, name: v.name }));
+                availableModels = fetchedModels.map(m => ({ model_id: m.model_id, name: m.name }));
+                addLog(`Đã tải ${availableVoices.length} giọng nói và ${availableModels.length} mô hình.`);
+                if (activeTab === 'convert') renderTextToSpeechConverter();
+            } catch (error) {
+                addLog(`Lỗi khi tải giọng nói/mô hình: ${error.message}`, 'error');
+                showCustomModal("Không thể tải danh sách giọng nói/mô hình. Vui lòng kiểm tra khóa API.");
+                availableVoices = [];
+                availableModels = [];
+                if (activeTab === 'convert') renderTextToSpeechConverter();
+            }
+        }
+        function renderTextToSpeechConverter() {
+            contentArea.innerHTML = `
+                <div class="p-6 bg-white rounded-lg shadow-md">
+                    <h2 class="text-2xl font-bold mb-4 text-gray-800">Chuyển Đổi Văn Bản Thành Âm Thanh</h2>
+                    <textarea id="inputText" rows="6" placeholder="Nhập văn bản bạn muốn chuyển đổi..." class="w-full p-3 border border-gray-300 rounded-md focus:ring-blue-500 focus:border-blue-500 resize-y mb-4"></textarea>
+                    <div class="grid grid-cols-1 md:grid-cols-2 gap-4 mb-6">
+                        <div>
+                            <label for="voiceSelect" class="block text-sm font-medium text-gray-700 mb-1">Giọng Nói:</label>
+                            <select id="voiceSelect" class="w-full p-2 border border-gray-300 rounded-md">
+                                ${availableVoices.length === 0 ? '<option value="">Vui lòng thêm API key</option>' : availableVoices.map(v => `<option value="${v.voice_id}">${v.name}</option>`).join('')}
+                            </select>
+                        </div>
+                        <div>
+                            <label for="modelSelect" class="block text-sm font-medium text-gray-700 mb-1">Mô Hình:</label>
+                            <select id="modelSelect" class="w-full p-2 border border-gray-300 rounded-md">
+                                ${availableModels.length === 0 ? '<option value="">Vui lòng thêm API key</option>' : availableModels.map(m => `<option value="${m.model_id}">${m.name}</option>`).join('')}
+                            </select>
+                        </div>
+                    </div>
+                    <button id="convertButton" class="w-full px-6 py-3 rounded-md text-white font-semibold bg-blue-600 hover:bg-blue-700">Bắt Đầu Chuyển Đổi</button>
+                    <div id="audio-output" class="mt-4 p-4 bg-gray-50 rounded-lg border border-gray-200 hidden">
+                        <h3 class="font-semibold text-lg mb-2 text-gray-800">Âm Thanh Đã Chuyển Đổi:</h3>
+                        <audio controls id="audioPlayer" class="w-full mb-2"></audio>
+                        <button id="downloadAudioButton" class="px-4 py-2 bg-green-600 text-white rounded-md hover:bg-green-700">Tải Về Âm Thanh</button>
+                    </div>
+                </div>
+            `;
+            document.getElementById('convertButton').addEventListener('click', handleConvert);
+            document.getElementById('downloadAudioButton')?.addEventListener('click', downloadAudio);
+            if (availableVoices.length === 0) {
+                const firstActiveKey = apiKeys.find(key => key.isActive);
+                if (firstActiveKey) updateVoiceAndModelDropdowns(firstActiveKey.key);
+            }
+        }
+        function renderPlaceholderTab(tabName) {
+            contentArea.innerHTML = `<div class="p-6 text-center text-gray-600"><p>Chức năng ${tabName} sẽ được phát triển trong tương lai.</p></div>`;
+        }
+        function renderActiveTab() {
+            if (!isAuthReady) {
+                showLoadingOverlay();
+                return;
+            }
+            hideLoadingOverlay();
+            document.querySelectorAll('.tab-button').forEach(button => {
+                const isCurrent = `tab-${activeTab}` === button.id;
+                button.classList.toggle('text-blue-700', isCurrent);
+                button.classList.toggle('border-blue-700', isCurrent);
+                button.classList.toggle('bg-white', isCurrent);
+                button.classList.toggle('text-gray-600', !isCurrent);
+                button.classList.toggle('border-transparent', !isCurrent);
+            });
+            switch (activeTab) {
+                case 'convert': renderTextToSpeechConverter(); break;
+                case 'manage': renderKeyManager(); break;
+                case 'batch': renderPlaceholderTab('xử lý hàng loạt'); break;
+                case 'options': renderPlaceholderTab('tùy chọn xử lý'); break;
+                default: renderTextToSpeechConverter();
+            }
+        }
+        // --- Text-to-Speech Logic ---
+        let isConverting = false;
+        let currentAudioBlob = null;
+        async function handleConvert() {
+            if (isConverting) return;
+            const inputText = document.getElementById('inputText').value.trim();
+            const voiceId = document.getElementById('voiceSelect').value;
+            const modelId = document.getElementById('modelSelect').value;
+            const convertButton = document.getElementById('convertButton');
+            const audioOutputDiv = document.getElementById('audio-output');
+            if (!inputText || !voiceId || !modelId) {
+                showCustomModal("Vui lòng nhập văn bản và chọn giọng nói/mô hình.");
+                return;
+            }
+            const textLength = inputText.length;
+            const availableKeys = apiKeys.filter(k => k.isActive && (k.characterLimit - k.characterCount) >= textLength).sort((a, b) => (b.characterLimit - b.characterCount) - (a.characterLimit - a.characterCount));
+            if (availableKeys.length === 0) {
+                showCustomModal("Không có khóa API nào đủ credits. Vui lòng thêm/xác thực khóa mới.");
+                return;
+            }
+            const keyToUse = availableKeys[0];
+            isConverting = true;
+            convertButton.disabled = true;
+            convertButton.innerHTML = `<div class="animate-spin rounded-full h-5 w-5 border-b-2 border-white inline-block mr-2"></div> Đang chuyển đổi...`;
+            audioOutputDiv.classList.add('hidden');
+            currentAudioBlob = null;
+            addLog(`Đang bắt đầu chuyển đổi với khóa ...${keyToUse.key.slice(-4)}`);
+            try {
+                const audioBlob = await elevenLabsTextToSpeech(keyToUse.key, voiceId, modelId, inputText);
+                const url = URL.createObjectURL(audioBlob);
+                document.getElementById('audioPlayer').src = url;
+                currentAudioBlob = audioBlob;
+                audioOutputDiv.classList.remove('hidden');
+                addLog("Chuyển đổi thành công.");
+                // Update credits after successful conversion
+                const newAccountInfo = await fetchElevenLabsAccountInfo(keyToUse.key);
+                await updateKeyCredits(keyToUse.id, newAccountInfo.character_count);
+            } catch (error) {
+                showCustomModal(`Lỗi chuyển đổi: ${error.message}`);
+                addLog(`Lỗi chuyển đổi: ${error.message}`, 'error');
+            } finally {
+                isConverting = false;
+                convertButton.disabled = false;
+                convertButton.textContent = 'Bắt Đầu Chuyển Đổi';
+            }
+        }
+        function downloadAudio() {
+            if (!currentAudioBlob) {
+                showCustomModal("Không có âm thanh để tải về.");
+                return;
+            }
+            const url = URL.createObjectURL(currentAudioBlob);
+            const a = document.createElement('a');
+            a.href = url;
+            a.download = `elevenlabs_audio_${new Date().toISOString().replace(/[:.]/g, '-')}.mp3`;
+            document.body.appendChild(a);
+            a.click();
+            document.body.removeChild(a);
+            URL.revokeObjectURL(url);
+            addLog("Âm thanh đã được tải về.");
+        }
+        // --- Event Listeners for Tabs ---
+        document.addEventListener('DOMContentLoaded', () => {
+            document.getElementById('tab-convert').addEventListener('click', () => { activeTab = 'convert'; renderActiveTab(); });
+            document.getElementById('tab-manage').addEventListener('click', () => { activeTab = 'manage'; renderActiveTab(); });
+            document.getElementById('tab-batch').addEventListener('click', () => { activeTab = 'batch'; renderActiveTab(); });
+            document.getElementById('tab-options').addEventListener('click', () => { activeTab = 'options'; renderActiveTab(); });
+            modalCloseButton.addEventListener('click', hideCustomModal);
+        });
+        window.onload = initializeFirebase;
+    </script>
+</body>
+</html>
